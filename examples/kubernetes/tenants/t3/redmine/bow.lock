@@ -1,0 +1,5 @@
+apiVersion: bow.io/v1
+kind: Lock
+stack: stack.yaml
+namespace: t3-redmine
+create_namespace: true

@@ -1,0 +1,3 @@
+# Tenant 1 — PostgreSQL staging overrides
+replicas: 1
+storage: 30Gi

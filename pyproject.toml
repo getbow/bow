@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bow-cli"
+version = "0.1.1"
+description = "Pythonic Kubernetes DSL — As powerful as Helm, as easy as Pulumi, as readable as Python"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "click>=8.0",
+    "semver>=3.0",
+]
+
+[project.scripts]
+bow = "bow.cli:main"
+
+[project.entry-points."bow.charts"]
+
+[tool.poetry]
+packages = [
+    { include = "bow", from = "src" }
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

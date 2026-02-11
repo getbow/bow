@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bow-redis"
+version = "7.2.0"
+description = "Redis chart for bow"
+requires-python = ">=3.11"
+dependencies = [
+    "bow-cli>=0.1.0",
+]
+
+[project.entry-points."bow.charts"]
+redis = "bow_redis:RedisChart"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bow_redis"]

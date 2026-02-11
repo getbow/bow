@@ -1,0 +1,4 @@
+# Tenant 1 — PostgreSQL base values
+name: t1-postgresql
+database: t1_app
+credentials_secret: t1-pg-credentials

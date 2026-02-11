@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bow-postgresql"
+version = "16.4.0"
+description = "PostgreSQL chart for bow"
+requires-python = ">=3.11"
+dependencies = [
+    "bow-cli>=0.1.0",
+]
+
+[project.entry-points."bow.charts"]
+postgresql = "bow_postgresql:PostgreSQLChart"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bow_postgresql"]

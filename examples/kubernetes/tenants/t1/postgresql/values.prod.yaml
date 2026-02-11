@@ -1,0 +1,10 @@
+# Tenant 1 — PostgreSQL production overrides
+replicas: 2
+storage: 100Gi
+resources:
+  cpu: "500m"
+  memory: "512Mi"
+  limits_cpu: "1"
+  limits_memory: "1Gi"
+metrics:
+  enabled: true

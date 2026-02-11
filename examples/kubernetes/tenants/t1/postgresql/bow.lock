@@ -1,0 +1,7 @@
+apiVersion: bow.io/v1
+kind: Lock
+chart: postgresql
+version: 16.4.0
+namespace: t1-postgresql
+create_namespace: true
+checksum: sha256:e1b98ca8ce00c11d9f1227b6c147f01bae3da3143a5426bb3340770c64e6ae84

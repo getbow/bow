@@ -1,0 +1,12 @@
+# Tenant 3 — Redmine production
+components:
+  redmine-db:
+    values:
+      replicas: 2
+      storage: 100Gi
+  redmine:
+    values:
+      replicas: 3
+      ingress:
+        tls: true
+        host: redmine.t3.example.com

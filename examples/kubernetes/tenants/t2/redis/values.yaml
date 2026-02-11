@@ -1,0 +1,5 @@
+# Tenant 2 — Redis base values
+name: t2-redis
+config:
+  maxmemory: "256mb"
+  maxmemory_policy: allkeys-lru

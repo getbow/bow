@@ -1,0 +1,8 @@
+# Tenant 3 — Redmine base values
+# Stack component overrides go here
+components:
+  redmine:
+    values:
+      ingress:
+        enabled: true
+        host: redmine.t3.internal

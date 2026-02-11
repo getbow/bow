@@ -1,0 +1,10 @@
+# Tenant 2 — Redis production
+storage: 20Gi
+password_secret: t2-redis-pass
+resources:
+  cpu: "200m"
+  memory: "512Mi"
+  limits_cpu: "500m"
+  limits_memory: "1Gi"
+config:
+  maxmemory: "512mb"

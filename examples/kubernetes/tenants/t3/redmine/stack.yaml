@@ -1,0 +1,28 @@
+apiVersion: bow.io/v1
+kind: Stack
+metadata:
+  name: t3-redmine
+  namespace: t3-redmine
+
+components:
+  - chart: postgresql
+    name: redmine-db
+    values:
+      database: redmine
+      credentials_secret: t3-db-credentials
+      storage: 20Gi
+
+  - chart: redis
+    name: redmine-cache
+    values:
+      config:
+        maxmemory: "128mb"
+
+  - chart: redmine
+    name: redmine
+    values:
+      postgresql:
+        enabled: false
+        name: "${redmine-db.host}"
+        database: "${redmine-db.values.database}"
+        credentials_secret: t3-db-credentials
