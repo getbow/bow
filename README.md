@@ -14,6 +14,52 @@ with Deployment("api", replicas=3):
 
 ## Installation
 
+### One-line install (recommended)
+
+Works on **macOS** and **Linux**. No manual `venv` activation needed — just install and use.
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/getbow/bow/main/install.sh)"
+```
+
+This will:
+- Detect your platform and find Python 3.11+
+- Create an isolated environment at `~/.bow/`
+- Place the `bow` command on your `PATH` (`~/.local/bin/bow`)
+- Update your shell profile (`~/.zshrc`, `~/.bashrc`, etc.)
+
+After installation, open a new terminal and run:
+
+```bash
+bow --help
+```
+
+#### Options
+
+Customize the installation via environment variables:
+
+```bash
+# Install a specific version
+BOW_VERSION=0.3.1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/getbow/bow/main/install.sh)"
+
+# Install from PyPI (when available) instead of GitHub
+BOW_SOURCE=pypi /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/getbow/bow/main/install.sh)"
+
+# Custom install directory
+BOW_DIR=/opt/bow /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/getbow/bow/main/install.sh)"
+
+# Don't modify shell profile
+BOW_NO_MODIFY_PATH=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/getbow/bow/main/install.sh)"
+```
+
+#### Uninstall
+
+```bash
+rm -rf ~/.bow ~/.local/bin/bow
+```
+
+### pip install (alternative)
+
 ```bash
 pip install bow-cli
 ```
