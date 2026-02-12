@@ -348,6 +348,8 @@ class Deployment(Resource):
                 child.selector = dict(self.labels)
             self.services.append(child)
         elif isinstance(child, PersistentVolumeClaim):
+            if child.enabled is False:
+                return
             self.pvcs.append(child)
             self.volumes.append({
                 "name": child.claim_name,
@@ -423,6 +425,8 @@ class StatefulSet(Resource):
                 child.selector = dict(self.labels)
             self.services.append(child)
         elif isinstance(child, PersistentVolumeClaim):
+            if child.enabled is False:
+                return
             self.volume_claim_templates.append(child.render_template())
         else:
             super()._adopt(child)

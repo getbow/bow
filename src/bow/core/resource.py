@@ -70,6 +70,8 @@ class Resource:
         self.props = kwargs
 
         # Attach to parent or register as top-level
+        if self.enabled is False:
+            return
         parent = _current()
         if parent is not None:
             parent._adopt(self)
