@@ -30,7 +30,9 @@ class Manifest:
         """Return all resources as a list of dicts."""
         docs: list[dict[str, Any]] = []
         for r in self._resources:
-            docs.extend(r.render_all())
+            for doc in r.render_all():
+                if doc is not None:
+                    docs.append(doc)
         return docs
 
     def to_yaml(self) -> str:

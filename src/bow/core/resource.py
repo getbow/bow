@@ -48,6 +48,9 @@ class Resource:
         self.metadata: dict[str, Any] = {"name": name}
         self.children: list[Any] = []
 
+        # Chart-level flags 
+        self.enabled = kwargs.pop("enabled", True)
+
         # Labels
         labels = dict(kwargs.pop("labels", {}) or {})
         labels.update(_TRACKING_LABELS)

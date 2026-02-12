@@ -8,6 +8,7 @@ Render logic is written in Python, default values are read from YAML.
 
 from __future__ import annotations
 
+import importlib.metadata
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -25,19 +26,23 @@ class Chart:
     Subclasses must define:
 
     - ``name``: Chart name (must match the entry_points key)
-    - ``version``: Semver string
     - ``requires``: ChartDep list (optional)
     - ``render(values)``: Method that creates resources
 
     Optional:
+    - ``description``: Chart description
     - ``defaults_file``: Path to defaults.yaml
     - ``default_values()``: Default values as a Python dict
+
+    Note:
+        Chart version is automatically read from the package's pyproject.toml
+        via importlib.metadata. You don't need to specify it in the Chart class.
 
     Usage::
 
         class PostgreSQLChart(Chart):
             name = "postgresql"
-            version = "16.4.0"
+            description = "PostgreSQL database"
 
             def render(self, values):
                 with Deployment(values["name"]):
@@ -48,6 +53,22 @@ class Chart:
     version: ClassVar[str] = "0.0.0"
     description: ClassVar[str] = ""
     requires: ClassVar[list[ChartDep]] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Auto-populate version from package metadata."""
+        super().__init_subclass__(**kwargs)
+        # Skip for Chart base class itself
+        if cls.__name__ == "Chart":
+            return
+        # Try to read version from package metadata
+        # Package name patterns: bow-<name>, bow_<name>, <name>
+        if cls.name:
+            for pkg_name in [f"bow-{cls.name}", f"bow_{cls.name}", cls.name]:
+                try:
+                    cls.version = importlib.metadata.version(pkg_name)
+                    break
+                except importlib.metadata.PackageNotFoundError:
+                    continue
 
     def default_values(self) -> dict[str, Any]:
         """Return default values.

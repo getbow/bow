@@ -33,6 +33,8 @@ class LockSpec:
     namespace: str | None = None
     checksum: str | None = None
     create_namespace: bool = False
+    registry: str | None = None      # oci://ghcr.io/charts
+    digest: str | None = None        # sha256:abc123 (OCI artifact)
 
     @property
     def is_stack(self) -> bool:
@@ -80,6 +82,8 @@ def parse_lock(path: str | Path) -> LockSpec:
         namespace=data.get("namespace"),
         checksum=data.get("checksum"),
         create_namespace=data.get("create_namespace", False),
+        registry=data.get("registry"),
+        digest=data.get("digest"),
     )
 
 
@@ -102,6 +106,10 @@ def write_lock(lock: LockSpec, path: str | Path) -> None:
         data["create_namespace"] = True
     if lock.checksum:
         data["checksum"] = lock.checksum
+    if lock.registry:
+        data["registry"] = lock.registry
+    if lock.digest:
+        data["digest"] = lock.digest
 
     with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)

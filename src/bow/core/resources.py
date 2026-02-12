@@ -257,6 +257,9 @@ class PersistentVolumeClaim(Resource):
         super().__init__(name, **kwargs)
 
     def render(self) -> dict[str, Any]:
+        if self.enabled is False:
+            return None  # Render empty if disabled
+        
         spec: dict[str, Any] = {
             "accessModes": self.access_modes,
             "resources": {"requests": {"storage": self.size}},
@@ -379,7 +382,9 @@ class Deployment(Resource):
     def render_all(self) -> list[dict[str, Any]]:
         docs: list[dict[str, Any]] = []
         for pvc in self.pvcs:
-            docs.append(pvc.render())
+            doc = pvc.render()
+            if doc is not None:
+                docs.append(doc)
         docs.append(self.render())
         for svc in self.services:
             docs.append(svc.render())

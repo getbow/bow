@@ -29,6 +29,21 @@ files = [
 ]
 
 [[package]]
+name = "jq-utils"
+version = "0.1.1"
+description = "JQ-style dictionary and list access for Python"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "jq_utils-0.1.1-py3-none-any.whl", hash = "sha256:556f4ad99bbe11ad4c252a2bda3e7b5d26083a8cbc62a7616bc404b28c5e33b5"},
+    {file = "jq_utils-0.1.1.tar.gz", hash = "sha256:7cbd2ebddbf9b7be4e357274495887070a5c62ceee98846c008d7e65d057fa51"},
+]
+
+[package.extras]
+test = ["pytest (>=7.0.0)"]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.3"
 description = "YAML parser and emitter for Python"
@@ -126,4 +141,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-content-hash = "4c094e2c708030bc598ed80362e0cb441507cc3e7690f17a58f11377c1a2f363"
+content-hash = "184b77919049d50fa0316a25561b4c3b2ed3b56a495f77fb8836237b263e5f95"
