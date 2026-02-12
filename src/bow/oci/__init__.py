@@ -2,6 +2,7 @@
 
 from bow.oci.config import (
     BowConfig, RegistryConfig, load_config, save_config, BOW_HOME,
+    DEFAULT_REGISTRY_URL, DEFAULT_REGISTRY_NAME,
 )
 from bow.oci.env import (
     EnvInfo, EnvError,
@@ -15,6 +16,7 @@ from bow.oci.client import (
 
 __all__ = [
     "BowConfig", "RegistryConfig", "load_config", "save_config", "BOW_HOME",
+    "DEFAULT_REGISTRY_URL", "DEFAULT_REGISTRY_NAME",
     "EnvInfo", "EnvError",
     "create_env", "delete_env", "get_env", "use_env", "list_envs",
     "resolve_active_env", "pip_install_in_env",

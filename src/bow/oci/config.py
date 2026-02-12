@@ -29,6 +29,10 @@ import yaml
 
 BOW_HOME = Path.home() / ".bow"
 
+# Default public registry for bow charts
+DEFAULT_REGISTRY_URL = "oci://ghcr.io/getbow/charts"
+DEFAULT_REGISTRY_NAME = "default"
+
 
 @dataclass
 class RegistryConfig:
@@ -45,14 +49,20 @@ class BowConfig:
     allowed_registries: list[str] = field(default_factory=list)
     active_env: str = "default"
 
-    def default_registry(self) -> RegistryConfig | None:
+    def default_registry(self) -> RegistryConfig:
+        """Return the default registry. Falls back to ghcr.io/getbow/charts."""
         for r in self.registries.values():
             if r.default:
                 return r
         # Fall back to the first registry
         if self.registries:
             return next(iter(self.registries.values()))
-        return None
+        # Fall back to the built-in default
+        return RegistryConfig(
+            name=DEFAULT_REGISTRY_NAME,
+            url=DEFAULT_REGISTRY_URL,
+            default=True,
+        )
 
     def is_registry_allowed(self, url: str) -> bool:
         """Check if registry URL is in the whitelist."""

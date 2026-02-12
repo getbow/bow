@@ -3,7 +3,7 @@ bow.cli.push_cmd — bow push command.
 
   bow push . --tag 16.4.0
   bow push ./charts/bow-postgresql
-  bow push . --registry oci://harbor.internal/charts
+  bow push . --registry oci://ghcr.io/getbow/charts
 """
 
 import sys
@@ -21,17 +21,9 @@ def push_cmd(chart_dir, tag, registry):
 
     cfg = load_config()
 
-    # Resolve registry
+    # Resolve registry (always has a default now)
     if registry is None:
-        default_reg = cfg.default_registry()
-        if default_reg is None:
-            click.echo(
-                "Error: No registry specified and no default configured.\n"
-                "Run: bow registry add default oci://...",
-                err=True,
-            )
-            sys.exit(1)
-        registry = default_reg.url
+        registry = cfg.default_registry().url
 
     # Package
     try:
@@ -48,6 +40,7 @@ def push_cmd(chart_dir, tag, registry):
         )
 
         # Push
+        click.echo(f"Pushing to {registry}...", err=True)
         ref = push_chart(artifact, registry)
         click.echo(f"✓ Pushed to {ref}", err=True)
 

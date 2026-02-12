@@ -2,23 +2,22 @@
 bow.oci.client — OCI registry client.
 
 Pushes/pulls charts as OCI artifacts.
-Simple HTTP-based OCI Distribution Spec client.
+
+Supports two backends:
+  1. Local filesystem registry (oci://local) — for development/testing
+  2. Remote OCI registries (ghcr.io, harbor, etc.) — via oras-py SDK
 
 OCI artifact structure:
   manifest.json
     ├── config: application/vnd.bow.chart.config.v1+json
     └── layer[0]: application/vnd.bow.chart.content.v1.tar+gzip
-
-First version: filesystem-based mock.
-OCI HTTP client to be added later (oras-py or custom).
-Currently charts are copied directly as tar.gz into the
-registry directory — for local development and testing.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import tarfile
 import tempfile
@@ -30,6 +29,119 @@ from typing import Any
 
 CHART_CONFIG_MEDIA_TYPE = "application/vnd.bow.chart.config.v1+json"
 CHART_CONTENT_MEDIA_TYPE = "application/vnd.bow.chart.content.v1.tar+gzip"
+
+
+def _is_remote_registry(url: str) -> bool:
+    """Check if a registry URL points to a remote OCI registry.
+
+    Remote registries are anything that is NOT:
+      - oci://local
+      - oci:///absolute/path (filesystem)
+      - file:///path
+
+    Examples of remote:
+      - oci://ghcr.io/getbow/charts
+      - oci://harbor.internal/bow
+      - ghcr.io/getbow/charts
+    """
+    url = url.strip()
+    if url.startswith("file://"):
+        return False
+    if url.startswith("oci://"):
+        remainder = url[6:]
+        # oci://local → local filesystem
+        if remainder == "local" or remainder.startswith("local/"):
+            return False
+        # oci:///absolute/path → local filesystem
+        if remainder.startswith("/"):
+            return False
+        # oci://ghcr.io/... → remote
+        return True
+    # Bare hostname like ghcr.io/getbow/charts
+    if "." in url.split("/")[0]:
+        return True
+    return False
+
+
+def _registry_to_oras_target(registry_url: str, name: str, version: str) -> str:
+    """Convert bow registry URL + chart name/version to an oras target string.
+
+    oci://ghcr.io/getbow/charts + valkey + 0.1.0
+      → ghcr.io/getbow/charts/valkey:0.1.0
+    """
+    url = registry_url.strip().rstrip("/")
+    if url.startswith("oci://"):
+        url = url[6:]
+    return f"{url}/{name}:{version}"
+
+
+def _get_oras_client():
+    """Create an oras client with Docker credential support.
+
+    Handles macOS Keychain (osxkeychain), Linux secretservice,
+    and plain Docker config.json credentials.
+    """
+    import oras.client
+    import oras.provider
+
+    client = oras.client.OrasClient()
+
+    # oras-py doesn't always pick up credsStore helpers automatically.
+    # Try to load credentials from the Docker credential helper.
+    try:
+        _load_docker_creds_into_oras(client)
+    except Exception:
+        pass  # Best effort — user can always do `bow registry login`
+
+    return client
+
+
+def _load_docker_creds_into_oras(client):
+    """Load Docker credsStore credentials into oras client.
+
+    Docker Desktop stores credentials via helpers like
+    docker-credential-osxkeychain (macOS) or
+    docker-credential-secretservice (Linux).
+    """
+    import json
+    import subprocess
+    from pathlib import Path
+
+    docker_config = Path.home() / ".docker" / "config.json"
+    if not docker_config.exists():
+        return
+
+    with open(docker_config) as f:
+        config = json.load(f)
+
+    creds_store = config.get("credsStore")
+    if not creds_store:
+        return  # Credentials are inline — oras handles this fine
+
+    helper = f"docker-credential-{creds_store}"
+
+    # For each registry in auths, get credentials from the helper
+    for registry in config.get("auths", {}):
+        try:
+            result = subprocess.run(
+                [helper, "get"],
+                input=registry,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                creds = json.loads(result.stdout)
+                username = creds.get("Username", "")
+                secret = creds.get("Secret", "")
+                if username and secret:
+                    client.login(
+                        hostname=registry,
+                        username=username,
+                        password=secret,
+                    )
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+            continue
 
 
 @dataclass
@@ -141,35 +253,24 @@ def unpack_chart(tar_path: str | Path, dest_dir: str | Path) -> Path:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # LOCAL REGISTRY (filesystem-based mock)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def push_chart(
+def _push_chart_local(
     artifact: ChartArtifact,
     registry_url: str,
 ) -> str:
-    """Push a chart to a registry.
-
-    Currently a local filesystem registry:
-      oci://local → ~/.bow/registry/
-      oci:///path/to/registry → custom path
-
-    Returns:
-        Full reference (oci://registry/name:version)
-    """
+    """Push a chart to a local filesystem registry."""
     registry_path = _resolve_registry_path(registry_url)
     registry_path.mkdir(parents=True, exist_ok=True)
 
     chart_path = registry_path / artifact.name
     chart_path.mkdir(parents=True, exist_ok=True)
 
-    # Tag directory
     tag_path = chart_path / artifact.version
     tag_path.mkdir(parents=True, exist_ok=True)
 
-    # Copy artifact
     if artifact.tar_path:
         dest = tag_path / f"{artifact.name}-{artifact.version}.tar.gz"
         shutil.copy2(artifact.tar_path, dest)
 
-    # Write manifest
     manifest = {
         "schemaVersion": 2,
         "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -193,17 +294,13 @@ def push_chart(
     return ref
 
 
-def pull_chart(
+def _pull_chart_local(
     name: str,
     version: str,
     registry_url: str,
     cache_dir: str | Path,
 ) -> ChartArtifact:
-    """Pull a chart from a registry.
-
-    Returns:
-        ChartArtifact (tar_path points to the cached file)
-    """
+    """Pull a chart from a local filesystem registry."""
     registry_path = _resolve_registry_path(registry_url)
     tag_path = registry_path / name / version
     cache_dir = Path(cache_dir)
@@ -213,7 +310,6 @@ def pull_chart(
             f"Chart not found: {name}:{version} in {registry_url}"
         )
 
-    # Read manifest
     manifest_file = tag_path / "manifest.json"
     if not manifest_file.exists():
         raise OCIError(f"Manifest not found for {name}:{version}")
@@ -224,12 +320,10 @@ def pull_chart(
     config = manifest.get("config", {}).get("data", {})
     digest = manifest.get("config", {}).get("digest", "")
 
-    # Find tar.gz
     tar_files = list(tag_path.glob("*.tar.gz"))
     if not tar_files:
         raise OCIError(f"No artifact found for {name}:{version}")
 
-    # Copy to cache
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_tar = cache_dir / tar_files[0].name
     if not cache_tar.exists():
@@ -246,8 +340,197 @@ def pull_chart(
     )
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# REMOTE REGISTRY (oras-py based)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def _push_chart_remote(
+    artifact: ChartArtifact,
+    registry_url: str,
+) -> str:
+    """Push a chart to a remote OCI registry via oras-py.
+
+    The tar.gz file is pushed as a single layer with custom media type.
+    Chart metadata is stored in manifest annotations.
+    """
+    if not artifact.tar_path or not artifact.tar_path.exists():
+        raise OCIError("No artifact tar.gz to push")
+
+    target = _registry_to_oras_target(
+        registry_url, artifact.name, artifact.version,
+    )
+
+    client = _get_oras_client()
+
+    # Write chart config as a temp JSON file for the manifest config
+    config_data = json.dumps(artifact.config or {}, indent=2)
+    config_file = Path(tempfile.mkdtemp()) / "chart-config.json"
+    config_file.write_text(config_data)
+
+    # Prepare manifest annotations with chart metadata
+    annotations = {
+        "io.bow.chart.name": artifact.name,
+        "io.bow.chart.version": artifact.version,
+        "io.bow.chart.description": artifact.description or "",
+        "io.bow.chart.digest": artifact.digest or "",
+        "org.opencontainers.image.title": artifact.name,
+        "org.opencontainers.image.version": artifact.version,
+    }
+
+    # Push the tar.gz as a file with custom media type
+    # oras format: "filepath:mediaType"
+    file_ref = f"{artifact.tar_path}:{CHART_CONTENT_MEDIA_TYPE}"
+
+    try:
+        # Change to temp dir so oras doesn't complain about path validation
+        original_dir = os.getcwd()
+        os.chdir(artifact.tar_path.parent)
+
+        response = client.push(
+            files=[file_ref],
+            target=target,
+            manifest_config=f"{config_file}:{CHART_CONFIG_MEDIA_TYPE}",
+            manifest_annotations=annotations,
+            disable_path_validation=True,
+        )
+
+        os.chdir(original_dir)
+
+        if response.status_code not in (200, 201):
+            raise OCIError(
+                f"Push failed with status {response.status_code}: "
+                f"{response.text}"
+            )
+    except OCIError:
+        raise
+    except Exception as e:
+        raise OCIError(f"Push to {target} failed: {e}") from e
+
+    ref = f"oci://{target}"
+    return ref
+
+
+def _pull_chart_remote(
+    name: str,
+    version: str,
+    registry_url: str,
+    cache_dir: str | Path,
+) -> ChartArtifact:
+    """Pull a chart from a remote OCI registry via oras-py."""
+    target = _registry_to_oras_target(registry_url, name, version)
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download dir for oras pull
+    download_dir = Path(tempfile.mkdtemp())
+
+    client = _get_oras_client()
+
+    try:
+        files = client.pull(
+            target=target,
+            outdir=str(download_dir),
+        )
+    except Exception as e:
+        raise OCIError(f"Pull {target} failed: {e}") from e
+
+    if not files:
+        raise OCIError(f"No files in artifact {name}:{version}")
+
+    # Find the tar.gz among pulled files
+    tar_file = None
+    config_data = {}
+    for f in files:
+        if f.endswith(".tar.gz"):
+            tar_file = Path(f)
+        elif f.endswith(".json"):
+            try:
+                config_data = json.loads(Path(f).read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    if tar_file is None:
+        # If no tar.gz, take the first file
+        tar_file = Path(files[0])
+
+    # Copy to cache
+    cache_tar = cache_dir / f"{name}-{version}.tar.gz"
+    shutil.copy2(tar_file, cache_tar)
+
+    # Compute digest
+    digest = _compute_file_digest(cache_tar)
+
+    # Try to get config from manifest annotations
+    try:
+        remote = client.remote
+        manifest = remote.get_manifest(target)
+        annots = manifest.get("annotations", {})
+        description = annots.get("io.bow.chart.description", "")
+        if not config_data:
+            config_blob = manifest.get("config", {})
+            if config_blob.get("mediaType") == CHART_CONFIG_MEDIA_TYPE:
+                # Config is stored as a blob, try to read it
+                pass
+    except Exception:
+        annots = {}
+        description = config_data.get("description", "")
+
+    return ChartArtifact(
+        name=name,
+        version=version,
+        description=description,
+        digest=digest,
+        registry=registry_url,
+        tar_path=cache_tar,
+        config=config_data,
+    )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PUBLIC API (routes local vs remote)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def push_chart(
+    artifact: ChartArtifact,
+    registry_url: str,
+) -> str:
+    """Push a chart to a registry.
+
+    Routes to local filesystem or remote OCI registry based on URL.
+
+    Returns:
+        Full reference (oci://registry/name:version)
+    """
+    if _is_remote_registry(registry_url):
+        return _push_chart_remote(artifact, registry_url)
+    return _push_chart_local(artifact, registry_url)
+
+
+def pull_chart(
+    name: str,
+    version: str,
+    registry_url: str,
+    cache_dir: str | Path,
+) -> ChartArtifact:
+    """Pull a chart from a registry.
+
+    Routes to local filesystem or remote OCI registry based on URL.
+
+    Returns:
+        ChartArtifact (tar_path points to the cached file)
+    """
+    if _is_remote_registry(registry_url):
+        return _pull_chart_remote(name, version, registry_url, cache_dir)
+    return _pull_chart_local(name, version, registry_url, cache_dir)
+
+
 def list_remote_charts(registry_url: str) -> list[dict[str, str]]:
     """List charts in a registry."""
+    if _is_remote_registry(registry_url):
+        return _list_remote_charts_oras(registry_url)
+    return _list_remote_charts_local(registry_url)
+
+
+def _list_remote_charts_local(registry_url: str) -> list[dict[str, str]]:
+    """List charts in a local filesystem registry."""
     registry_path = _resolve_registry_path(registry_url)
     if not registry_path.exists():
         return []
@@ -262,6 +545,31 @@ def list_remote_charts(registry_url: str) -> list[dict[str, str]]:
                         "version": version_dir.name,
                     })
     return charts
+
+
+def _list_remote_charts_oras(registry_url: str) -> list[dict[str, str]]:
+    """List charts in a remote OCI registry via oras-py.
+
+    Note: OCI Distribution Spec doesn't have a standard catalog/list API
+    for all registries. This tries the _catalog endpoint.
+    """
+    try:
+        client = _get_oras_client()
+        url = registry_url.strip().rstrip("/")
+        if url.startswith("oci://"):
+            url = url[6:]
+
+        remote = client.remote
+        # Try to list tags for known chart names
+        # OCI doesn't have a universal listing mechanism
+        # This is a best-effort approach
+        tags = remote.get_tags(url)
+        charts = []
+        for tag in tags:
+            charts.append({"name": url.rsplit("/", 1)[-1], "version": tag})
+        return charts
+    except Exception:
+        return []
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

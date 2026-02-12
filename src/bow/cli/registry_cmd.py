@@ -1,10 +1,12 @@
 """
 bow.cli.registry_cmd — bow registry command.
 
-  bow registry add default oci://ghcr.io/myorg/charts
+  bow registry add default oci://ghcr.io/getbow/charts
   bow registry add harbor oci://harbor.internal/bow --default
   bow registry list
   bow registry remove harbor
+  bow registry login ghcr.io
+  bow registry login ghcr.io -u USERNAME -p TOKEN
 """
 
 import sys
@@ -15,6 +17,45 @@ import click
 def registry_cmd():
     """OCI registry management."""
     pass
+
+
+@registry_cmd.command("login")
+@click.argument("hostname")
+@click.option("--username", "-u", default=None, help="Registry username")
+@click.option("--password", "-p", default=None,
+              help="Registry password/token (or use --password-stdin)")
+@click.option("--password-stdin", is_flag=True,
+              help="Read password from stdin")
+def registry_login(hostname, username, password, password_stdin):
+    """Login to an OCI registry.
+
+    \b
+    Examples:
+      bow registry login ghcr.io
+      bow registry login ghcr.io -u USERNAME -p ghp_TOKEN
+      echo $GITHUB_TOKEN | bow registry login ghcr.io -u USERNAME --password-stdin
+    """
+    import oras.client
+
+    if password_stdin:
+        password = sys.stdin.readline().strip()
+
+    if not username:
+        username = click.prompt("Username")
+    if not password:
+        password = click.prompt("Password/Token", hide_input=True)
+
+    try:
+        client = oras.client.OrasClient()
+        client.login(
+            hostname=hostname,
+            username=username,
+            password=password,
+        )
+        click.echo(f"✓ Logged in to {hostname}")
+    except Exception as e:
+        click.echo(f"Error: Login failed: {e}", err=True)
+        sys.exit(1)
 
 
 @registry_cmd.command("add")

@@ -22,15 +22,6 @@ def pull_cmd(reference):
     # Parse reference: name:version or oci://reg/name:version
     name, version, registry_url = _parse_reference(reference, cfg)
 
-    # Whitelist check
-    if not cfg.is_registry_allowed(registry_url):
-        click.echo(
-            f"❌ Registry not allowed: {registry_url}\n"
-            f"Add it to security.allowed_registries in ~/.bow/config.yaml",
-            err=True,
-        )
-        sys.exit(1)
-
     # Pull
     try:
         env = get_env()
@@ -83,13 +74,7 @@ def _parse_reference(ref: str, cfg) -> tuple[str, str, str]:
     else:
         # postgresql:16.4.0 — use default registry
         name_version = ref
-        default_reg = cfg.default_registry()
-        if default_reg is None:
-            raise click.BadParameter(
-                "No default registry configured. "
-                "Run: bow registry add default oci://..."
-            )
-        registry_base = default_reg.url
+        registry_base = cfg.default_registry().url
 
     if ":" in name_version:
         name, version = name_version.rsplit(":", 1)

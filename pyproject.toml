@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bow-cli"
-version = "0.3.1"
+version = "0.4.1"
 description = "Pythonic Kubernetes DSL — As powerful as Helm, as easy as Pulumi, as readable as Python"
 readme = "README.md"
 license = "MIT"
@@ -14,6 +14,7 @@ dependencies = [
     "click>=8.0",
     "semver>=3.0",
     "jq-utils (>=0.1.1,<0.2.0)",
+    "oras>=0.2.30",
 ]
 
 [project.scripts]
