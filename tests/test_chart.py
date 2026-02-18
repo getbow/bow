@@ -16,7 +16,7 @@ from bow.core.stack import _reset
 from bow.chart.values import deep_merge, parse_set_values, merge_all_values
 from bow.chart.registry import register_chart, get_chart, list_charts, reset_registry
 from bow.chart.dependency import ChartDep, resolve_condition, get_dep_values
-from bow_postgresql import PostgreSQLChart
+from postgresql import PostgreSQLChart
 
 
 @pytest.fixture(autouse=True)

@@ -16,9 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from bow.core.stack import _reset
 from bow.chart.registry import register_chart, reset_registry
-from bow_postgresql import PostgreSQLChart
-from bow_redis import RedisChart
-from bow_redmine import RedmineChart
+from postgresql import PostgreSQLChart
 from bow.workspace.lock import (
     LockSpec, parse_lock, write_lock, compute_checksum, check_drift, LockError,
 )
@@ -31,8 +29,6 @@ def clean():
     _reset()
     reset_registry()
     register_chart(PostgreSQLChart)
-    register_chart(RedisChart)
-    register_chart(RedmineChart)
     yield
     _reset()
     reset_registry()

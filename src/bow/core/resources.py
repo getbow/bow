@@ -468,6 +468,9 @@ class StatefulSet(Resource):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SERVICE — both leaf and with
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_UNSET = object()  # Sentinel value for cluster_ip
+
+
 class ServicePort:
     """Service port definition. Used as a leaf inside a Service context."""
 
@@ -523,6 +526,7 @@ class Service(Resource):
     ):
         self.type = type
         self.selector: dict = kwargs.pop("selector", {})
+        self.cluster_ip = kwargs.pop("cluster_ip", _UNSET)
         self.ports: list[dict] = []
 
         # Leaf mode: if port is provided, add it immediately
@@ -542,15 +546,23 @@ class Service(Resource):
         pass  # ServicePort adds directly to self.ports
 
     def render(self) -> dict[str, Any]:
+        spec: dict[str, Any] = {
+            "type": self.type,
+            "selector": self.selector,
+            "ports": self.ports,
+        }
+        if self.cluster_ip is not _UNSET:
+            # User explicitly set cluster_ip
+            if self.cluster_ip is None:
+                # For headless services: cluster_ip=None → clusterIP: "None"
+                spec["clusterIP"] = "None"
+            else:
+                spec["clusterIP"] = self.cluster_ip
         return {
             "apiVersion": self._api_version,
             "kind": self._kind,
             "metadata": {"name": self.metadata["name"]},
-            "spec": {
-                "type": self.type,
-                "selector": self.selector,
-                "ports": self.ports,
-            },
+            "spec": spec,
         }
 
 
@@ -766,3 +778,61 @@ class CronJob(Resource):
                 },
             },
         }
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ENV HELPERS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def env_from(credentials, *keys: str) -> None:
+    """Set env vars from a credentials block.
+
+    Routes each key to the right source based on what's
+    configured in the credentials block:
+
+    defaults.yaml — plain values (default)::
+
+        credentials:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: appdb
+          POSTGRES_PASSWORD: secret123
+
+    user overrides with secret::
+
+        credentials:
+          secret_ref: pg-credentials
+
+    user overrides with configmap::
+
+        credentials:
+          configmap_ref: pg-config
+
+    mixed — configmap with one value override::
+
+        credentials:
+          configmap_ref: pg-config
+          POSTGRES_DB: override_db
+
+    Chart code (always the same regardless of source)::
+
+        env_from(v.credentials,
+                 "POSTGRES_USER", "POSTGRES_DB", "POSTGRES_PASSWORD")
+    """
+    data = credentials._data if hasattr(credentials, "_data") else credentials
+    if not isinstance(data, dict):
+        data = {}
+
+    secret_ref = data.get("secret_ref")
+    secrets = data.get("secrets")
+    configmap_ref = data.get("configmap_ref")
+    configmaps = data.get("configmaps")
+    reserved = {"secret_ref", "configmap_ref"}
+
+    for key in keys:
+        if key in data and key not in reserved:
+            # Explicit value — always wins
+            EnvVar(key, value=data[key])
+        elif key in secrets and secret_ref:
+            EnvVar(key, secret_ref=secret_ref, secret_key=secrets[key])
+        elif key in configmaps and configmap_ref:
+            EnvVar(key, configmap_ref=configmap_ref, configmap_key=configmaps[key])
+        else:
+            EnvVar(key, value="")

@@ -8,7 +8,6 @@ Render logic is written in Python, default values are read from YAML.
 
 from __future__ import annotations
 
-import importlib.metadata
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -54,29 +53,12 @@ class Chart:
     description: ClassVar[str] = ""
     requires: ClassVar[list[ChartDep]] = []
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-populate version from package metadata."""
-        super().__init_subclass__(**kwargs)
-        # Skip for Chart base class itself
-        if cls.__name__ == "Chart":
-            return
-        # Try to read version from package metadata
-        # Package name patterns: bow-<name>, bow_<name>, <name>
-        if cls.name:
-            for pkg_name in [f"bow-{cls.name}", f"bow_{cls.name}", cls.name]:
-                try:
-                    cls.version = importlib.metadata.version(pkg_name)
-                    break
-                except importlib.metadata.PackageNotFoundError:
-                    continue
-
     def default_values(self) -> dict[str, Any]:
-        """Return default values.
+        """Load defaults from defaults.yaml next to the chart module.
 
-        First looks for defaults.yaml next to the chart module,
-        returns an empty dict if not found. Subclass may override.
+        defaults.yaml is required. If missing, raises FileNotFoundError
+        so chart developers are forced to define all defaults explicitly.
         """
-        # Look for defaults.yaml next to the chart module
         module_file = getattr(self.__class__, "__module__", None)
         if module_file:
             import importlib
@@ -87,10 +69,18 @@ class Chart:
                     with open(defaults_path) as f:
                         data = yaml.safe_load(f)
                     return data if isinstance(data, dict) else {}
+                raise FileNotFoundError(
+                    f"defaults.yaml not found for chart '{self.name}'. "
+                    f"Expected at: {defaults_path}"
+                )
         return {}
 
-    def render(self, values: dict[str, Any]) -> None:
-        """Create resources. Subclass MUST implement."""
+    def render(self, values) -> None:
+        """Render chart resources. Subclass MUST implement.
+
+        Args:
+            values: A Values object with dot-access (v.service.port).
+        """
         raise NotImplementedError(f"{self.__class__.__name__}.render()")
 
     def template(
@@ -146,11 +136,14 @@ class Chart:
                     f"Install it with: pip install bow-{dep.chart}"
                 )
 
-            # Dependency values
-            dep_values = get_dep_values(values, dep)
+            # Dependency values: dep chart defaults → dep.default_values → parent overrides
+            dep_defaults = dep_chart.default_values()
+            dep_overrides = get_dep_values(values, dep)
+            from bow.chart.values import deep_merge as _dm, Values
+            dep_values = _dm(dep_defaults, dep_overrides)
 
-            # Render
-            dep_chart.render(dep_values)
+            # Render (wrap in Values for dot-access)
+            dep_chart.render(Values(dep_values))
 
     def info(self) -> dict[str, Any]:
         """Return chart information (for bow inspect)."""

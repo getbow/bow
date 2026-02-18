@@ -68,7 +68,7 @@ def parse_set_values(set_args: list[str]) -> dict:
 
 
 def _coerce_value(value: str) -> Any:
-    """Convert a string value to the appropriate Python type.
+    """String değeri uygun Python tipine çevir.
 
     >>> _coerce_value("3")
     3
@@ -98,8 +98,8 @@ def merge_all_values(
     defaults: dict,
     value_files: list[str | Path],
     set_args: list[str],
-) -> dict:
-    """Merge all value sources.
+) -> Values:
+    """Merge all value sources and return a Values object.
 
     Precedence (low to high):
       defaults → value_files (in order) → set_args
@@ -111,4 +111,73 @@ def merge_all_values(
     if set_args:
         set_values = parse_set_values(set_args)
         result = deep_merge(result, set_values)
-    return result
+    return Values(result)
+
+
+class Values:
+    """Dot-notation access wrapper over a dict.
+
+    Provides clean attribute-style access to nested config::
+
+        v.service.port          # instead of values["service"]["port"]
+        v.resources.cpu         # nested access
+        v.replicas              # scalar
+
+    If a key is missing, raises AttributeError with a clear message
+    pointing to the missing key path (means defaults.yaml is incomplete).
+
+    The underlying dict is always accessible via ``v._data``.
+    Dict-style access (v["key"]) and iteration also work.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: dict[str, Any]):
+        object.__setattr__(self, "_data", data)
+
+    def __getattr__(self, key: str) -> Any:
+        try:
+            val = self._data[key]
+        except KeyError:
+            raise AttributeError(
+                f"Value '{key}' not found. "
+                f"Add it to defaults.yaml or pass via -f / --set"
+            ) from None
+        if isinstance(val, dict):
+            return Values(val)
+        return val
+
+    def __getitem__(self, key: str) -> Any:
+        val = self._data[key]
+        if isinstance(val, dict):
+            return Values(val)
+        return val
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __repr__(self) -> str:
+        return f"Values({self._data!r})"
+
+    def __bool__(self) -> bool:
+        return bool(self._data)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dict-compatible get with fallback."""
+        val = self._data.get(key, default)
+        if isinstance(val, dict):
+            return Values(val)
+        return val
+
+    def items(self):
+        return self._data.items()
+
+    def keys(self):
+        return self._data.keys()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the underlying raw dict."""
+        return self._data

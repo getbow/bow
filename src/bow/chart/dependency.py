@@ -28,8 +28,10 @@ class ChartDep:
     default_values: dict[str, Any] = field(default_factory=dict)
 
 
-def resolve_condition(values: dict, condition: str | None) -> bool:
-    """Check the condition string in the values dict.
+def resolve_condition(values, condition: str | None) -> bool:
+    """Check a dot-path condition against values.
+
+    Works with both dict and Values objects.
 
     >>> resolve_condition({"postgresql": {"enabled": True}}, "postgresql.enabled")
     True
@@ -44,22 +46,28 @@ def resolve_condition(values: dict, condition: str | None) -> bool:
     parts = condition.split(".")
     current: Any = values
     for part in parts:
-        if isinstance(current, dict) and part in current:
+        if _is_mapping(current) and part in current:
             current = current[part]
         else:
-            return True  # Key not found, default enabled
+            return True  # Key missing = default enabled
     return bool(current)
 
 
-def get_dep_values(values: dict, dep: ChartDep) -> dict:
-    """Extract values for the dependency chart.
+def get_dep_values(values, dep: ChartDep) -> dict:
+    """Extract dependency values from parent chart values.
 
-    Uses the nested dict matching the dependency name in the
-    main chart's values; falls back to default_values.
+    Works with both dict and Values objects.
+    Returns a plain dict (dependency chart wraps it in Values itself).
     """
     from bow.chart.values import deep_merge
 
     result = dict(dep.default_values)
-    if dep.chart in values and isinstance(values[dep.chart], dict):
-        result = deep_merge(result, values[dep.chart])
+    raw = values._data if hasattr(values, "_data") else values
+    if dep.chart in raw and isinstance(raw[dep.chart], dict):
+        result = deep_merge(result, raw[dep.chart])
     return result
+
+
+def _is_mapping(obj) -> bool:
+    """Check if obj supports dict-like access (dict or Values)."""
+    return isinstance(obj, dict) or hasattr(obj, "_data")

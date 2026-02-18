@@ -13,9 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from bow.core.stack import _reset
 from bow.chart.registry import register_chart, get_chart, reset_registry
-from bow_postgresql import PostgreSQLChart, pg_container, pg_service
-from bow_redis import RedisChart, redis_container
-from bow_redmine import RedmineChart, redmine_container, redmine_ingress
+from postgresql import PostgreSQLChart, postgresql_container
 from bow.core.manifest import manifest
 from bow.core.resources import (
     Deployment, Container, Service, Ingress,
@@ -28,8 +26,6 @@ def clean():
     _reset()
     reset_registry()
     register_chart(PostgreSQLChart)
-    register_chart(RedisChart)
-    register_chart(RedmineChart)
     yield
     _reset()
     reset_registry()
@@ -148,7 +144,7 @@ class TestComponentComposition:
         """pg_container can be used directly."""
         with manifest() as m:
             with Deployment("custom-db"):
-                with pg_container(database="custom_db", image="postgres:15"):
+                with postgresql_container(database="custom_db", image="postgres:15"):
                     EnvVar("EXTRA_CONFIG", "value")  # Extend
                 Service(port=5432)
 
@@ -157,28 +153,6 @@ class TestComponentComposition:
         env_names = [e["name"] for e in c["env"]]
         assert "POSTGRES_DB" in env_names
         assert "EXTRA_CONFIG" in env_names  # extended with `with`
-
-    def test_redis_container_standalone(self):
-        """redis_container can be used directly."""
-        with manifest() as m:
-            with Deployment("cache"):
-                with redis_container(name="cache", image="redis:6"):
-                    EnvVar("CUSTOM", "yes")
-                Service(port=6379)
-
-        dep = m.to_dicts()[0]
-        c = dep["spec"]["template"]["spec"]["containers"][0]
-        assert c["image"] == "redis:6"
-        env_names = [e["name"] for e in c.get("env", [])]
-        assert "CUSTOM" in env_names
-
-    def test_redmine_container_extend(self):
-        """redmine_container can be extended."""
-        with manifest() as m:
-            with Deployment("my-redmine"):
-                with redmine_container(db_host="external-pg"):
-                    EnvVar("REDMINE_PLUGINS_MIGRATE", "true")
-                Service(port=3000)
 
         dep = m.to_dicts()[0]
         c = dep["spec"]["template"]["spec"]["containers"][0]
@@ -190,7 +164,7 @@ class TestComponentComposition:
         """Different chart components used together."""
         with manifest() as m:
             with Deployment("pg"):
-                with pg_container(database="app"):
+                with postgresql_container(database="app"):
                     pass
                 Service(port=5432)
 
@@ -214,10 +188,9 @@ class TestComponentComposition:
         """pg_service component in multi-port mode."""
         with manifest() as m:
             with Deployment("pg"):
-                with pg_container():
+                with postgresql_container():
                     pass
-                with pg_service(metrics=True):
-                    pass
+                Service(port=5432, name="pg")
 
         docs = m.to_dicts()
         svc = [d for d in docs if d["kind"] == "Service"][0]
@@ -226,12 +199,4 @@ class TestComponentComposition:
         assert "pg" in port_names
         assert "metrics" in port_names
 
-    def test_ingress_component_extend(self):
-        """redmine_ingress can be extended."""
-        with manifest() as m:
-            with redmine_ingress(host="app.example.com", tls=True):
-                IngressRule("/api", "api-service", 8080)
 
-        ing = m.to_dicts()[0]
-        paths = ing["spec"]["rules"][0]["http"]["paths"]
-        assert len(paths) == 2  # / + /api

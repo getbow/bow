@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from bow.core.stack import _reset
 from bow.chart.registry import register_chart, reset_registry
-from bow_postgresql import PostgreSQLChart
+from postgresql import PostgreSQLChart
 from bow.stack.parser import parse_stack_file, parse_stack_dict, StackParseError
 from bow.stack.refs import resolve_refs, RefError
 from bow.stack.merger import merge_stack_files, apply_set_to_stack
