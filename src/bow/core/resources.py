@@ -821,9 +821,9 @@ def env_from(credentials, *keys: str) -> None:
         data = {}
 
     secret_ref = data.get("secret_ref")
-    secrets = data.get("secrets")
+    secrets = data.get("secrets", {})
     configmap_ref = data.get("configmap_ref")
-    configmaps = data.get("configmaps")
+    configmaps = data.get("configmaps", {})
     reserved = {"secret_ref", "configmap_ref"}
 
     for key in keys:
