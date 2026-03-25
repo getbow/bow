@@ -1,0 +1,4 @@
+bow==0.1.0
+bow-postgresql>=16.0.0
+bow-redis
+bow-redmine==5.1.0

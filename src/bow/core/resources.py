@@ -827,12 +827,12 @@ def env_from(credentials, *keys: str) -> None:
     reserved = {"secret_ref", "configmap_ref"}
 
     for key in keys:
-        if key in data and key not in reserved:
+        if key in secrets and secret_ref:
+            EnvVar(key, secret_ref=secret_ref, secret_key=key)
+        elif key in configmaps and configmap_ref:
+            EnvVar(key, configmap_ref=configmap_ref, configmap_key=key)
+        elif key in data and key not in reserved:
             # Explicit value — always wins
             EnvVar(key, value=data[key])
-        elif key in secrets and secret_ref:
-            EnvVar(key, secret_ref=secret_ref, secret_key=secrets[key])
-        elif key in configmaps and configmap_ref:
-            EnvVar(key, configmap_ref=configmap_ref, configmap_key=configmaps[key])
         else:
             EnvVar(key, value="")

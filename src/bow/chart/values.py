@@ -147,6 +147,13 @@ class Values:
             return Values(val)
         return val
 
+    def __setattr__(self, key: str, value: Any) -> None:
+        if key == "_data":
+            object.__setattr__(self, key, value)
+        else:
+            # Values nesnesi geçilirse altındaki dict'i sakla
+            self._data[key] = value._data if isinstance(value, Values) else value            
+
     def __getitem__(self, key: str) -> Any:
         val = self._data[key]
         if isinstance(val, dict):
